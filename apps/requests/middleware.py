@@ -9,7 +9,7 @@ class JWTAuthenticationMiddleware:
 
     def __call__(self, request):
         # Skip authentication for certain paths
-        skip_paths = ['/admin/', '/api/users/login/', '/api/users/signup/', '/', '/api/docs/', '/api/redoc/', '/api/schema/']
+        skip_paths = ['/admin/', '/api/users/login/', '/api/users/signup/', '/api/docs/', '/api/redoc/', '/api/schema/']
         
         if any(request.path.startswith(path) for path in skip_paths):
             return self.get_response(request)
