@@ -9,8 +9,13 @@ class JWTAuthenticationMiddleware:
 
     def __call__(self, request):
         # Skip authentication for certain paths
-        skip_paths = ['/admin/', '/api/users/login/', '/api/users/signup/', '/api/docs/', '/api/redoc/', '/api/schema/']
+        skip_paths = ['/admin/', '/api/users/login/', '/api/users/signup/' , '/api/users/', '/api/users/reset-password/', '/api/docs/', '/api/redoc/', '/api/schema/']
         
+        # Check for exact match for root path
+        if request.path == '/':
+            return self.get_response(request)
+        
+        # Check for path prefixes
         if any(request.path.startswith(path) for path in skip_paths):
             return self.get_response(request)
         
@@ -25,13 +30,18 @@ class JWTAuthenticationMiddleware:
             decoded = jwt.decode(token, settings.JWT_SECRET, algorithms=['HS256'])
             user = User.objects.get(user_id=decoded['user_id'])
             
-            # Add user info to request
-            request.user_data = {
+            # Add user info to request - this will be accessible in DRF views
+            user_data = {
                 'id': str(user.user_id),
                 'role': user.role,
                 'email': user.email,
                 'name': f"{user.first_name} {user.last_name}",
             }
+            
+            # Set on the Django request object
+            request.user_data = user_data
+            # Also set as META for DRF compatibility
+            request.META['user_data'] = user_data
             
         except (jwt.InvalidTokenError, User.DoesNotExist, KeyError):
             return JsonResponse({'error': 'Invalid or expired token'}, status=403)

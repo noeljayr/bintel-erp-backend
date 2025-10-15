@@ -11,6 +11,23 @@ from .models import Request
 from .serializers import RequestSerializer, RequestCreateSerializer, RequestUpdateSerializer, RequestEditSerializer, RequestListResponseSerializer
 from apps.users.models import User
 
+def get_user_data(request):
+    """Helper function to get user_data from request, compatible with both Django and DRF requests"""
+    # Try to get from DRF request first
+    if hasattr(request, '_request') and hasattr(request._request, 'user_data'):
+        return request._request.user_data
+    # Try to get from Django request
+    elif hasattr(request, 'user_data'):
+        return request.user_data
+    # Try to get from META (fallback)
+    elif hasattr(request, 'META') and 'user_data' in request.META:
+        return request.META['user_data']
+    # Try to get from _request.META (DRF wrapped request)
+    elif hasattr(request, '_request') and hasattr(request._request, 'META') and 'user_data' in request._request.META:
+        return request._request.META['user_data']
+    else:
+        raise AttributeError("user_data not found in request")
+
 @extend_schema(
     tags=['Requests'],
     summary='List requests or create new request',
@@ -61,8 +78,9 @@ def get_requests(request):
         filters &= Q(status=status_filter)
     
     # Role-based access control
-    if request.user_data['role'] != 'Partner':
-        filters &= Q(request_by=request.user_data['id'])
+    user_data = get_user_data(request)
+    if user_data['role'] != 'Partner':
+        filters &= Q(request_by=user_data['id'])
     
     # Search functionality
     if search:
@@ -94,8 +112,8 @@ def get_requests(request):
     
     # Status counts (with role-based access)
     status_base_filter = Q()
-    if request.user_data['role'] != 'Partner':
-        status_base_filter = Q(request_by=request.user_data['id'])
+    if user_data['role'] != 'Partner':
+        status_base_filter = Q(request_by=user_data['id'])
     
     status_counts = Request.objects.filter(status_base_filter).values('status').annotate(count=Count('status'))
     status_summary = {'Pending': 0, 'Approved': 0, 'Rejected': 0}
@@ -131,8 +149,9 @@ def export_requests(request):
     filters = Q(status='Approved')
     
     # Role-based access control
-    if request.user_data['role'] != 'Partner':
-        filters &= Q(request_by=request.user_data['id'])
+    user_data = get_user_data(request)
+    if user_data['role'] != 'Partner':
+        filters &= Q(request_by=user_data['id'])
     
     requests = Request.objects.filter(filters).order_by('-initiated_on')
     
@@ -222,7 +241,8 @@ def get_request_by_id(request, request_id):
         return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
     
     # Access control
-    if request.user_data['role'] != 'Partner' and str(req.request_by) != request.user_data['id']:
+    user_data = get_user_data(request)
+    if user_data['role'] != 'Partner' and str(req.request_by) != user_data['id']:
         return Response({'error': 'Not authorized'}, status=status.HTTP_403_FORBIDDEN)
     
     serializer = RequestSerializer(req)
@@ -234,7 +254,8 @@ def create_request(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     # Create request with current user as requester
-    req = serializer.save(request_by=request.user_data['id'])
+    user_data = get_user_data(request)
+    req = serializer.save(request_by=user_data['id'])
     
     # Return with populated data
     response_serializer = RequestSerializer(req)
@@ -247,7 +268,8 @@ def update_request_status(request, request_id):
         return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
     
     # Only the approver can update status
-    if request.user_data['id'] != str(req.approver_id):
+    user_data = get_user_data(request)
+    if user_data['id'] != str(req.approver_id):
         return Response({'error': 'Not authorized to update status'}, status=status.HTTP_403_FORBIDDEN)
     
     serializer = RequestUpdateSerializer(req, data=request.data, partial=True)
@@ -268,7 +290,8 @@ def edit_request(request, request_id):
         return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
     
     # Only the requester can edit their own request
-    if request.user_data['id'] != str(req.request_by):
+    user_data = get_user_data(request)
+    if user_data['id'] != str(req.request_by):
         return Response({'error': 'Not authorized to edit this request'}, status=status.HTTP_403_FORBIDDEN)
     
     # Only pending requests can be edited
@@ -296,7 +319,8 @@ def delete_request(request, request_id):
         return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
     
     # Only the requester can delete their own request
-    if request.user_data['id'] != str(req.request_by):
+    user_data = get_user_data(request)
+    if user_data['id'] != str(req.request_by):
         return Response({'error': 'Not authorized to delete this request'}, status=status.HTTP_403_FORBIDDEN)
     
     # Only pending requests can be deleted

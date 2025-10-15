@@ -22,10 +22,21 @@ class User(models.Model):
         db_table = 'users'
     
     def save(self, *args, **kwargs):
-        # Hash password if it's being set/changed
-        if self.pk is None or 'password' in kwargs.get('update_fields', []):
-            if not self.password.startswith('$2b$'):  # Check if already hashed
+        # Hash password if it's being set/changed and it's not already hashed
+        if self.pk is None or self._state.adding:
+            # New user - hash the password if it's not already hashed
+            if not self.password.startswith('$2b$'):
                 self.password = bcrypt.hashpw(self.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        else:
+            # Existing user - only hash if password field was actually changed
+            try:
+                old_user = User.objects.get(pk=self.pk)
+                if old_user.password != self.password and not self.password.startswith('$2b$'):
+                    self.password = bcrypt.hashpw(self.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            except User.DoesNotExist:
+                # Fallback - hash if not already hashed
+                if not self.password.startswith('$2b$'):
+                    self.password = bcrypt.hashpw(self.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         super().save(*args, **kwargs)
     
     def check_password(self, password):

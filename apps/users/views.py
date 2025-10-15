@@ -268,3 +268,105 @@ def reset_password(request):
     user.save()
     
     return Response({'message': 'Password reset successfully'})
+
+@extend_schema(
+    tags=['Users'],
+    summary='Delete user account',
+    description='Delete user account. Users can delete their own account, Partners can delete any user account. Note: This action is irreversible and will also delete all associated requests.',
+    responses={
+        200: MessageResponseSerializer,
+        401: MessageResponseSerializer,
+        403: MessageResponseSerializer,
+        404: MessageResponseSerializer,
+        409: MessageResponseSerializer
+    },
+    examples=[
+        OpenApiExample(
+            'Success Response',
+            value={"message": "User account deleted successfully"}
+        )
+    ]
+)
+@api_view(['DELETE'])
+def delete_user(request, user_id=None):
+    # Get authentication token
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return Response({'message': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        token = auth_header.split(' ')[1]
+        decoded = jwt.decode(token, settings.JWT_SECRET, algorithms=['HS256'])
+        current_user_id = decoded['user_id']
+        current_user_role = decoded.get('role', 'Employee')
+    except (jwt.InvalidTokenError, IndexError, KeyError):
+        return Response({'message': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    # Determine which user to delete
+    target_user_id = user_id if user_id else current_user_id
+    
+    # Get current user for authorization checks
+    try:
+        current_user = User.objects.get(user_id=current_user_id)
+    except User.DoesNotExist:
+        return Response({'message': 'Current user not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Get target user to delete
+    try:
+        target_user = User.objects.get(user_id=target_user_id)
+    except User.DoesNotExist:
+        return Response({'message': 'User to delete not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Authorization checks
+    if target_user_id != current_user_id:
+        # Trying to delete another user - only Partners can do this
+        if current_user.role != 'Partner':
+            return Response({
+                'message': 'Only Partners can delete other user accounts'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Prevent Partners from deleting other Partners (optional safety measure)
+        if target_user.role == 'Partner' and current_user.role == 'Partner':
+            return Response({
+                'message': 'Partners cannot delete other Partner accounts'
+            }, status=status.HTTP_403_FORBIDDEN)
+    
+    # Check and handle associated requests
+    from apps.requests.models import Request
+    user_requests = Request.objects.filter(request_by=target_user_id)
+    request_count = user_requests.count()
+    
+    # Also check for requests where this user is the approver
+    approver_requests = Request.objects.filter(approver_id=target_user_id, status='Pending')
+    approver_count = approver_requests.count()
+    
+    # Store user info for response
+    deleted_user_name = f"{target_user.first_name} {target_user.last_name}"
+    deleted_user_email = target_user.email
+    
+    # Delete associated requests first (since there's no proper FK cascade)
+    if request_count > 0:
+        user_requests.delete()
+    
+    # Handle requests where this user was the approver (set to null or reassign)
+    if approver_count > 0:
+        # For now, we'll leave these requests as orphaned (you might want to reassign them)
+        # In a production system, you'd want to reassign to another Partner
+        pass
+    
+    # Delete the user
+    target_user.delete()
+    
+    # Prepare response message
+    base_message = f'User account for {deleted_user_name} ({deleted_user_email}) has been deleted successfully'
+    if target_user_id == current_user_id:
+        base_message = 'Your account has been deleted successfully'
+    
+    # Add information about deleted requests if any existed
+    if request_count > 0:
+        base_message += f' along with {request_count} associated request(s)'
+    
+    if approver_count > 0:
+        base_message += f' (Note: {approver_count} pending request(s) were left without an approver)'
+    
+    return Response({'message': base_message})
