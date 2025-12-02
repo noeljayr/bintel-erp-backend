@@ -12,12 +12,23 @@ COPY . .
 # Copy the SQLite database (with your local data)
 COPY db.sqlite3 .
 
+# Create startup script for SQLite
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "🔄 Running migrations with SQLite..."\n\
+python manage.py makemigrations users --noinput --settings=backend.settings_sqlite || true\n\
+python manage.py makemigrations requests --noinput --settings=backend.settings_sqlite || true\n\
+python manage.py migrate --noinput --settings=backend.settings_sqlite\n\
+echo "✅ Migrations complete"\n\
+echo "🚀 Starting Django server with SQLite..."\n\
+exec python manage.py runserver 0.0.0.0:5100 --settings=backend.settings_sqlite\n\
+' > /app/start-sqlite.sh && chmod +x /app/start-sqlite.sh
+
 # Set environment variable to use SQLite settings
 ENV DJANGO_SETTINGS_MODULE=backend.settings_sqlite
 
-# Expose port (Render will use PORT env variable)
+# Expose port
 EXPOSE 5100
 
-# Run migrations (in case of any pending) and start server
-CMD python manage.py migrate --settings=backend.settings_sqlite && \
-    python manage.py runserver 0.0.0.0:5100 --settings=backend.settings_sqlite
+# Use the SQLite startup script (NOT wait-for-postgres.sh)
+CMD ["/app/start-sqlite.sh"]
