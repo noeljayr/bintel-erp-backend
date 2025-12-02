@@ -37,6 +37,7 @@ from .serializers import (
                     "email": "john@example.com",
                     "phone": "+1234567890",
                     "role": "Employee",
+                    "github_username": "johndoe",
                     "created_at": "2024-01-01T00:00:00Z",
                     "updated_at": "2024-01-01T00:00:00Z"
                 }
@@ -123,7 +124,8 @@ def login(request):
                 "email": "john@example.com",
                 "phone": "+1234567890",
                 "role": "Employee",
-                "password": "securepassword123"
+                "password": "securepassword123",
+                "github_username": "johndoe"
             }
         )
     ]
@@ -180,6 +182,8 @@ def edit_user(request):
         user.last_name = request.data['last_name']
     if 'email' in request.data:
         user.email = request.data['email']
+    if 'github_username' in request.data:
+        user.github_username = request.data['github_username']
     
     user.save()
     

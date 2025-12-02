@@ -4,12 +4,12 @@ from .models import User
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['user_id', 'first_name', 'last_name', 'email', 'phone', 'role', 'created_at', 'updated_at']
+        fields = ['user_id', 'first_name', 'last_name', 'email', 'phone', 'role', 'github_username', 'created_at', 'updated_at']
 
 class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'email', 'phone', 'role', 'password']
+        fields = ['first_name', 'last_name', 'email', 'phone', 'role', 'password', 'github_username']
         extra_kwargs = {'password': {'write_only': True}}
 
 class LoginSerializer(serializers.Serializer):
@@ -34,3 +34,4 @@ class UserUpdateSerializer(serializers.Serializer):
     first_name = serializers.CharField(required=False, help_text="User's first name")
     last_name = serializers.CharField(required=False, help_text="User's last name") 
     email = serializers.EmailField(required=False, help_text="User's email address")
+    github_username = serializers.CharField(required=False, allow_blank=True, allow_null=True, help_text="User's GitHub username")
