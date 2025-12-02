@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: bintel-erp-backend
+    env: docker
+    dockerfilePath: ./Dockerfile.render
+    envVars:
+      - key: JWT_SECRET
+        value: bintel
+      - key: SECRET_KEY
+        value: django-insecure-change-me-in-production
+      - key: DEBUG
+        value: True
+      - key: DJANGO_SETTINGS_MODULE
+        value: backend.settings_sqlite
+    healthCheckPath: /api/schema/
